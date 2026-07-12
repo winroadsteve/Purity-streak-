@@ -1,0 +1,6 @@
+{
+  "name": "Purity Streak",
+  "description": "Track your purity journey, view scripture & reading guides, analyze progress charts, and connect with an AI spiritual counselor to overcome temptation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
