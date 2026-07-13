@@ -142,11 +142,11 @@ export default function App() {
   };
 
   // Handle reporting a relapse/reset
-  const handleRelapse = (trigger: string, note: string) => {
+  const handleRelapse = (trigger: string, note: string, customRelapseTimeMs?: number) => {
     if (!streak) return;
 
-    const todayString = formatDateStr(new Date());
-    const relapseTime = Date.now();
+    const relapseTime = customRelapseTimeMs || Date.now();
+    const relapseDateStr = formatDateStr(new Date(relapseTime));
 
     const newRecord: RelapseRecord = {
       id: `relapse-${relapseTime}`,
@@ -157,19 +157,22 @@ export default function App() {
 
     const newHistory = [newRecord, ...streak.relapseHistory];
 
+    const diffMs = Date.now() - relapseTime;
+    const currentDaysComputed = diffMs <= 0 ? 0 : Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
     const updatedStreak: Streak = {
       id: `streak-${relapseTime}`,
-      startDate: relapseTime, // New streak starts now
+      startDate: relapseTime, // New streak starts from custom relapse time
       lastRelapseDate: relapseTime,
-      currentDays: 0,
+      currentDays: currentDaysComputed,
       longestDays: streak.longestDays, // Keep historical longest days
       relapseHistory: newHistory
     };
 
     // Log the relapse day in history
-    const filteredLogs = dailyLogs.filter(log => log.dateString !== todayString);
+    const filteredLogs = dailyLogs.filter(log => log.dateString !== relapseDateStr);
     const relapseLog: DailyProgressLog = {
-      dateString: todayString,
+      dateString: relapseDateStr,
       status: "relapsed",
       urgesIntensity: 9,
       mood: 1,
@@ -184,6 +187,24 @@ export default function App() {
     
     // Auto switch back to dashboard
     setActiveTab("dashboard");
+  };
+
+  // Adjust streak start date directly
+  const handleSetStartDate = (startDateMs: number) => {
+    if (!streak) return;
+
+    const diffMs = Date.now() - startDateMs;
+    const currentDaysComputed = diffMs <= 0 ? 0 : Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const newLongest = Math.max(currentDaysComputed, streak.longestDays);
+
+    const updatedStreak: Streak = {
+      ...streak,
+      startDate: startDateMs,
+      currentDays: currentDaysComputed,
+      longestDays: newLongest
+    };
+
+    saveStateToLocalStorage(updatedStreak, dailyLogs);
   };
 
   // Handle Mark Reading Done from Reading library
@@ -341,6 +362,7 @@ export default function App() {
                   onRelapse={handleRelapse}
                   onResetData={handleResetData}
                   onImportData={handleImportData}
+                  onSetStartDate={handleSetStartDate}
                 />
               )}
               {activeTab === "charts" && <ProgressCharts dailyLogs={dailyLogs} />}

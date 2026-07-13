@@ -23,9 +23,10 @@ interface DashboardProps {
   streak: Streak;
   dailyLogs: DailyProgressLog[];
   onCheckIn: (log: Omit<DailyProgressLog, "dateString">) => void;
-  onRelapse: (trigger: string, note: string) => void;
+  onRelapse: (trigger: string, note: string, customRelapseTimeMs?: number) => void;
   onResetData: () => void;
   onImportData: (data: { streak: Streak; dailyLogs: DailyProgressLog[] }) => void;
+  onSetStartDate: (startDateMs: number) => void;
 }
 
 const BADGES = [
@@ -43,12 +44,20 @@ export default function Dashboard({
   onCheckIn, 
   onRelapse,
   onResetData,
-  onImportData
+  onImportData,
+  onSetStartDate
 }: DashboardProps) {
   const [timeElapsed, setTimeElapsed] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
   const [showCheckInModal, setShowCheckInModal] = useState(false);
   const [showRelapseModal, setShowRelapseModal] = useState(false);
   const [showConfirmReset, setShowConfirmReset] = useState(false);
+  const [showEditStartModal, setShowEditStartModal] = useState(false);
+
+  // Helper to get local date time string for <input type="datetime-local" />
+  const getLocalDateTimeString = (date: Date = new Date()) => {
+    const tzOffset = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() - tzOffset).toISOString().slice(0, 16);
+  };
   
   // Check-in form state
   const [urgesIntensity, setUrgesIntensity] = useState(3);
@@ -61,6 +70,17 @@ export default function Dashboard({
   // Relapse form state
   const [relapseTrigger, setRelapseTrigger] = useState("Boredom");
   const [relapseNote, setRelapseNote] = useState("");
+  const [relapseDateTime, setRelapseDateTime] = useState(getLocalDateTimeString());
+
+  // Edit start date state
+  const [customStartDate, setCustomStartDate] = useState(getLocalDateTimeString(new Date(streak.startDate)));
+
+  // Sync relapse default date to "now" whenever modal opens
+  useEffect(() => {
+    if (showRelapseModal) {
+      setRelapseDateTime(getLocalDateTimeString());
+    }
+  }, [showRelapseModal]);
 
   const TRIGGERS = ["Boredom", "Stress", "Social Media", "Late Night", "Loneliness", "Anger/Frustration", "Fatigue", "Unprotected Web Surfing"];
 
@@ -110,7 +130,8 @@ export default function Dashboard({
 
   const handleRelapseSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onRelapse(relapseTrigger, relapseNote);
+    const relapseTimeMs = new Date(relapseDateTime).getTime();
+    onRelapse(relapseTrigger, relapseNote, isNaN(relapseTimeMs) ? Date.now() : relapseTimeMs);
     setShowRelapseModal(false);
     // Reset form
     setRelapseNote("");
@@ -168,6 +189,22 @@ export default function Dashboard({
             <h1 className="text-3xl md:text-4xl font-extrabold text-zinc-100 tracking-tight">
               Your Sanctification Path
             </h1>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-zinc-400 font-bold bg-zinc-950/45 border border-zinc-800/65 px-4 py-2.5 rounded-2xl w-full max-w-md">
+              <span className="flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                Started: {new Date(streak.startDate).toLocaleDateString(undefined, { dateStyle: "medium" })} at {new Date(streak.startDate).toLocaleTimeString(undefined, { timeStyle: "short" })}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomStartDate(getLocalDateTimeString(new Date(streak.startDate)));
+                  setShowEditStartModal(true);
+                }}
+                className="text-amber-500 hover:text-amber-400 underline decoration-dotted underline-offset-4 cursor-pointer font-extrabold"
+              >
+                Adjust Start Date
+              </button>
+            </div>
             <p className="text-zinc-400 max-w-md text-sm italic">
               "Create in me a clean heart, O God, and renew a right spirit within me." – Psalm 51:10
             </p>
@@ -561,12 +598,23 @@ export default function Dashboard({
                   <select
                     value={relapseTrigger}
                     onChange={(e) => setRelapseTrigger(e.target.value)}
-                    className="w-full bg-zinc-950 text-zinc-100 p-3 rounded-xl border border-zinc-800 text-xs focus:ring-amber-500 focus:border-amber-500 outline-none font-bold"
+                    className="w-full bg-zinc-950 text-zinc-100 p-3 rounded-xl border border-zinc-800 text-xs focus:ring-amber-500 focus:border-amber-500 outline-none font-bold cursor-pointer"
                   >
                     {TRIGGERS.map((trig, idx) => (
                       <option key={idx} value={trig}>{trig}</option>
                     ))}
                   </select>
+                </div>
+
+                {/* Relapse Date/Time Selector */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-zinc-400">When did the slip occur?</label>
+                  <input
+                    type="datetime-local"
+                    value={relapseDateTime}
+                    onChange={(e) => setRelapseDateTime(e.target.value)}
+                    className="w-full bg-zinc-950 text-zinc-100 p-3 rounded-xl border border-zinc-800 text-xs focus:ring-amber-500 focus:border-amber-500 outline-none font-bold cursor-pointer"
+                  />
                 </div>
 
                 {/* Honest reflections */}
@@ -598,6 +646,65 @@ export default function Dashboard({
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Start Date Modal */}
+      <AnimatePresence>
+        {showEditStartModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
+            <motion.div 
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 20, opacity: 0 }}
+              className="bg-zinc-900 rounded-3xl p-6 max-w-sm w-full border border-zinc-800 shadow-2xl overflow-hidden"
+            >
+              <div className="space-y-5">
+                <div className="text-center space-y-1">
+                  <div className="w-12 h-12 bg-amber-500/10 text-amber-500 border border-amber-500/25 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <Calendar className="w-6 h-6 animate-pulse" />
+                  </div>
+                  <h3 className="text-xl font-black text-zinc-100">Adjust Streak Start</h3>
+                  <p className="text-zinc-400 text-xs">
+                    Enter the exact date and time your current purity streak began.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-zinc-400">Streak Start Date & Time</label>
+                  <input 
+                    type="datetime-local"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    className="w-full bg-zinc-950 text-zinc-100 p-3 rounded-xl border border-zinc-800 text-xs focus:ring-amber-500 focus:border-amber-500 outline-none font-bold cursor-pointer"
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newStartDateMs = new Date(customStartDate).getTime();
+                      if (!isNaN(newStartDateMs)) {
+                        onSetStartDate(newStartDateMs);
+                      }
+                      setShowEditStartModal(false);
+                    }}
+                    className="flex-1 py-3 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black rounded-xl text-xs transition-all shadow-sm active:scale-95 cursor-pointer"
+                  >
+                    Save Start Date
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowEditStartModal(false)}
+                    className="px-5 py-3 bg-zinc-850 hover:bg-zinc-800 text-zinc-350 border border-zinc-850 font-bold rounded-xl text-xs transition-all active:scale-95 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}
